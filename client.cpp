@@ -7,13 +7,14 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <sstream>
 
 void handleServerResponses(int serverSocket);
 void sendCommand(int serverSocket, const std::string& command, const std::string& args = "");
 
 int main() {
-    const std::string serverIP = "127.0.0.1"; // Example server IP address
-    const int PORT = 12345; // Example server port
+    std::string serverIP = "127.0.0.1"; // Default server IP address
+    int PORT = 12345; // Default server port
 
     int sock = 0;
     struct sockaddr_in serv_addr;
@@ -31,39 +32,75 @@ int main() {
         return -1;
     }
 
-    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        std::cout << "\nConnection Failed\n";
-        return -1;
+    std::cout << "Client started. Use %connect [ip] [port] to connect to a server." << std::endl;
+
+    // Client command loop
+    bool joined = false; // Track if the client has joined the message board
+    std::string inputLine;
+    std::string username; // Username of the client
+    while (true) {
+        std::getline(std::cin, inputLine); // Read user input from console
+        if (inputLine.empty()) continue;
+
+        if (inputLine.find("%connect") == 0) {
+            std::istringstream iss(inputLine);
+            std::string cmd, newIP;
+            int newPort;
+            iss >> cmd >> newIP >> newPort;
+            if (!newIP.empty() && newPort > 0) {
+                serverIP = newIP;
+                PORT = newPort;
+                serv_addr.sin_port = htons(PORT);
+
+                // Convert IPv4 and IPv6 addresses from text to binary form
+                if (inet_pton(AF_INET, serverIP.c_str(), &serv_addr.sin_addr) <= 0) {
+                    std::cout << "\nInvalid address/Address not supported\n";
+                    continue;
+                }
+
+                if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+                    std::cout << "\nConnection Failed\n";
+                    continue;
+                }
+
+                std::cout << "Connected to the server at " << serverIP << ":" << PORT << std::endl;
+
+                // Prompt for username and send it to the server
+                std::cout << "Enter username: ";
+                std::getline(std::cin, username);
+                username += "\n"; // Ensure to append a newline character to signal end of input
+                send(sock, username.c_str(), username.length(), 0); // Directly send the username
+
+                break; // Exit the loop and continue with the rest of the client code
+            } else {
+                std::cout << "Invalid arguments for %connect command\n";
+            }
+        } else {
+            std::cout << "You must connect to the server with %connect [ip] [port] before using other commands.\n";
+        }
     }
-
-    std::cout << "Connected to the server at " << serverIP << ":" << PORT << std::endl;
-
-    // Prompt for username and send it to the server
-    std::string username;
-    std::cout << "Enter username to join the group: ";
-    std::getline(std::cin, username);
-    username += "\n"; // Ensure to append a newline character to signal end of input
-    send(sock, username.c_str(), username.length(), 0); // Directly send the username
 
     // Start a thread to handle server responses
     std::thread serverThread(handleServerResponses, sock);
     serverThread.detach(); // Don't need to join the thread, letting it run freely
 
     // Client command loop
-    std::string inputLine;
     while (true) {
         std::getline(std::cin, inputLine); // Read user input from console
         if (inputLine.empty()) continue;
 
-        if (inputLine == "%leave") {
-            sendCommand(sock, "%leave");
-            break; // Exit the loop and close the application
-        } else if (inputLine.find("%post") == 0) {
-            // Handle post command
+        if (!joined && inputLine == "%join") {
             sendCommand(sock, inputLine);
-        } else if (inputLine == "%users") {
-            sendCommand(sock, "%users");
-        } else if (inputLine.find("%message") == 0) {
+            joined = true; // Update the joined status
+        } else if (!joined) {
+            std::cout << "You must join the message board with %join before using other commands.\n";
+        } else if (inputLine == "%leave") {
+            sendCommand(sock, inputLine);
+            joined = false; // Update the joined status
+        } else if (inputLine == "%exit") {
+            break; // Exit the loop and close the application
+        } else if (inputLine.find("%post") == 0 || inputLine.find("%message") == 0 || inputLine == "%users") {
+            // Handle post, message, and users commands
             sendCommand(sock, inputLine);
         } else {
             // Send the message to the server

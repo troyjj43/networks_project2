@@ -10,7 +10,7 @@
 #include <chrono>
 #include <algorithm>
 #include <sys/socket.h>
-#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 #include <atomic>
 #include <deque>
@@ -144,21 +144,8 @@ void handleClient(int clientSocket) {
     {
         std::lock_guard<std::mutex> guard(clientListMutex);
         clients[clientSocket] = username;
+        clientSockets.push_back(clientSocket);
     }
-
-    // Notify other clients that the user has joined
-    {
-        std::lock_guard<std::mutex> guard(clientListMutex);
-        for (const auto& client : clients) {
-            if (client.first != clientSocket) {
-                std::string joinMsg = username + " has joined the chat.";
-                send(client.first, joinMsg.c_str(), joinMsg.length(), 0);
-            }
-        }
-    }
-
-    // Send message history to the client
-    sendHistoryToClient(clientSocket);
 
     // Listen for messages from the client
     while (true) {
@@ -171,11 +158,24 @@ void handleClient(int clientSocket) {
         }
 
         std::string msg(buffer, readSize);
+        if (msg != "%join") {
+            // Check if the client has joined the group
+            {
+                std::lock_guard<std::mutex> guard(clientListMutex);
+                if (clients.find(clientSocket) == clients.end()) {
+                    // Client has not joined the group yet
+                    std::string joinMsg = "You must join the message board with %join before using other commands.";
+                    send(clientSocket, joinMsg.c_str(), joinMsg.length(), 0);
+                    continue;
+                }
+            }
+        }
+
         if (msg == "%leave") {
             // Remove the client from the global list and map
             {
                 std::lock_guard<std::mutex> guard(clientListMutex);
-                clientSockets.erase(std::remove(clientSockets.begin(), clientSockets.end(), clientSocket),	clientSockets.end());
+                clientSockets.erase(std::remove(clientSockets.begin(), clientSockets.end(), clientSocket), clientSockets.end());
                 clients.erase(clientSocket);
             }
 
@@ -202,26 +202,37 @@ void handleClient(int clientSocket) {
                 std::string postMsg = getCurrentTime() + " " + username + " posted: " + postContent;
                 broadcastMessage(postMsg, clientSocket);
             }
-        } else {
-            // For simplicity, we'll assume all other messages are chat messages to be broadcasted
-            std::string formattedMsg = getCurrentTime() + " " + username + ": " + msg;
-            broadcastMessage(formattedMsg, clientSocket);
+        } else if (msg == "%exit") {
+            // Notify other clients that the user has left
+            {
+                std::lock_guard<std::mutex> guard(clientListMutex);
+                for (const auto& client : clients) {
+                    std::string leaveMsg = username + " has left the chat.";
+                    send(client.first, leaveMsg.c_str(), leaveMsg.length(), 0);
+                }
+            }
+
+            // Remove the client from the global list and map
+            {
+                std::lock_guard<std::mutex> guard(clientListMutex);
+                clientSockets.erase(std::remove(clientSockets.begin(), clientSockets.end(), clientSocket), clientSockets.end());
+                clients.erase(clientSocket);
+            }
+            break; // Exit the loop and close the client connection
         }
-    }
-
-    // Remove the client from the global list and map
-    {
-        std::lock_guard<std::mutex> guard(clientListMutex);
-        clientSockets.erase(std::remove(clientSockets.begin(), clientSockets.end(), clientSocket),	clientSockets.end());
-        clients.erase(clientSocket);
-    }
-
-    // Notify other clients that the user has left
-    {
-        std::lock_guard<std::mutex> guard(clientListMutex);
-        for (const auto& client : clients) {
-            std::string leaveMsg = username + " has left the chat.";
-            send(client.first, leaveMsg.c_str(), leaveMsg.length(), 0);
+        else if (msg == "%join") {
+            // Notify other clients that the user has joined the group
+            {
+                std::lock_guard<std::mutex> guard(clientListMutex);
+                for (const auto& client : clients) {
+                    if (client.first != clientSocket && std::find(clientSockets.begin(), clientSockets.end(), client.first) != clientSockets.end()) {
+                        std::string joinMsg = username + " has joined the group.";
+                        send(client.first, joinMsg.c_str(), joinMsg.length(), 0);
+                    }
+                }
+                // Add the client to the list of joined clients
+                clients[clientSocket] = username;
+            }
         }
     }
 
