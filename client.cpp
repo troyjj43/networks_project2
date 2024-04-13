@@ -58,6 +58,13 @@ int main() {
         if (inputLine == "%leave") {
             sendCommand(sock, "%leave");
             break; // Exit the loop and close the application
+        } else if (inputLine.find("%post") == 0) {
+            // Handle post command
+            sendCommand(sock, inputLine);
+        } else if (inputLine == "%users") {
+            sendCommand(sock, "%users");
+        } else if (inputLine.find("%message") == 0) {
+            sendCommand(sock, inputLine);
         } else {
             // Send the message to the server
             sendCommand(sock, "%message", inputLine);
@@ -98,7 +105,6 @@ void handleServerResponses(int serverSocket) {
         }
     }
 }
-
 
 void sendCommand(int serverSocket, const std::string& command, const std::string& args) {
     std::string fullCommand = command;

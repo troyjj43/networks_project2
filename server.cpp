@@ -22,6 +22,10 @@ std::mutex clientListMutex; // Mutex for thread-safe access to the clientSockets
 std::atomic<bool> serverRunning(true); // Needed for shutting down server
 std::deque<std::string> messageHistory; // Store last 2 messages
 const size_t maxMessageHistory = 2; // Maximum number of messages to store in history
+std::string userList;
+
+// Message ID counter
+int messageIdCounter = 1;
 
 void handleClient(int clientSocket);
 void broadcastMessage(const std::string& message, int excludeSocket);
@@ -34,6 +38,15 @@ std::string getCurrentTime() {
     std::string formattedTime = std::ctime(&now_c); 
     formattedTime.pop_back(); // Remove newline character added by ctime
     return formattedTime;
+}
+
+// Used to update which clients are connected
+void updateUserList() {
+    std::lock_guard<std::mutex> guard(clientListMutex);
+    userList.clear();
+    for (const auto& client : clients) {
+        userList += client.second + "\n";
+    }
 }
 
 void listenForShutdownCommand() {
@@ -159,11 +172,39 @@ void handleClient(int clientSocket) {
 
         std::string msg(buffer, readSize);
         if (msg == "%leave") {
-            // Handle leave command
-            break;
+            // Remove the client from the global list and map
+            {
+                std::lock_guard<std::mutex> guard(clientListMutex);
+                clientSockets.erase(std::remove(clientSockets.begin(), clientSockets.end(), clientSocket),	clientSockets.end());
+                clients.erase(clientSocket);
+            }
+
+            // Notify other clients that the user has left
+            {
+                std::lock_guard<std::mutex> guard(clientListMutex);
+                for (const auto& client : clients) {
+                    std::string leaveMsg = username + " has left the chat.";
+                    send(client.first, leaveMsg.c_str(), leaveMsg.length(), 0);
+                }
+            }
+            break; // Exit the loop and close the client connection
+        } else if (msg == "%users") {
+            // Update the user list
+            updateUserList();
+
+            // Send the user list to the client
+            send(clientSocket, userList.c_str(), userList.length(), 0);
+        } else if (msg.find("%post") == 0) {
+            // Extract the message content from the %post command
+            std::string postContent = msg.substr(6); // Skip "%post "
+            if (!postContent.empty()) {
+                std::lock_guard<std::mutex> guard(clientListMutex);
+                std::string postMsg = getCurrentTime() + " " + username + " posted: " + postContent;
+                broadcastMessage(postMsg, clientSocket);
+            }
         } else {
             // For simplicity, we'll assume all other messages are chat messages to be broadcasted
-            std::string formattedMsg = username + ": " + msg;
+            std::string formattedMsg = getCurrentTime() + " " + username + ": " + msg;
             broadcastMessage(formattedMsg, clientSocket);
         }
     }
@@ -171,13 +212,18 @@ void handleClient(int clientSocket) {
     // Remove the client from the global list and map
     {
         std::lock_guard<std::mutex> guard(clientListMutex);
-        clientSockets.erase(std::remove(clientSockets.begin(), clientSockets.end(), clientSocket), clientSockets.end());
+        clientSockets.erase(std::remove(clientSockets.begin(), clientSockets.end(), clientSocket),	clientSockets.end());
         clients.erase(clientSocket);
     }
 
     // Notify other clients that the user has left
-    std::string leaveMsg = username + " has left the chat.";
-    broadcastMessage(leaveMsg, clientSocket);
+    {
+        std::lock_guard<std::mutex> guard(clientListMutex);
+        for (const auto& client : clients) {
+            std::string leaveMsg = username + " has left the chat.";
+            send(client.first, leaveMsg.c_str(), leaveMsg.length(), 0);
+        }
+    }
 
     // Close the socket
     close(clientSocket);
@@ -203,7 +249,6 @@ void sendHistoryToClient(int clientSocket) {
         }
     }
 }
-
 
 void broadcastMessage(const std::string& message, int excludeSocket = -1) {
     std::lock_guard<std::mutex> guard(clientListMutex); // Ensure thread safety

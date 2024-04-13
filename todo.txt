@@ -1,0 +1,18 @@
+- Dedicated server + client [DONE]
+- Server keeps track of who joins/leaves
+- msg history of 2 message
+
+
+• Usability (15%): Your program should be user friendly. You can use special input commands to handle user’s
+requests. For example, you can use the following set of console commands with options:
+– a %connect command followed by the address and port number of a running bulletin board server to
+connect to.
+– a %join command to join the single message board
+– a %post command followed by the message subject and the message content or main body to post a
+message to the board.
+
+– a %users command to retrieve a list of users in the same group. [WORKS]
+– a %leave command to leave the group. [WORKS]
+
+– a %message command followed by message ID to retrieve the content of the message.
+– an %exit command to disconnect from the server and exit the client program.
