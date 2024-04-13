@@ -1,22 +1,17 @@
 #include <iostream>
-#include <sstream>
 #include <string>
-#include <vector>
-#include <map>
 #include <thread>
 #include <mutex>
-#include <ctime>
 #include <cstring>
-#include <chrono>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <arpa/inet.h> 
+#include <arpa/inet.h>
 #include <unistd.h>
 
 void handleServerResponses(int serverSocket);
 void sendCommand(int serverSocket, const std::string& command, const std::string& args = "");
 
-int main(int argc, char const *argv[]) {
+int main() {
     const std::string serverIP = "127.0.0.1"; // Example server IP address
     const int PORT = 12345; // Example server port
 
@@ -60,15 +55,12 @@ int main(int argc, char const *argv[]) {
         std::getline(std::cin, inputLine); // Read user input from console
         if (inputLine.empty()) continue;
 
-        if (inputLine == "%exit") {
+        if (inputLine == "%leave") {
+            sendCommand(sock, "%leave");
             break; // Exit the loop and close the application
         } else {
-            // Extract command and arguments (simplified parsing)
-            size_t spaceIndex = inputLine.find(' ');
-            std::string command = inputLine.substr(0, spaceIndex);
-            std::string args = spaceIndex != std::string::npos ? inputLine.substr(spaceIndex + 1) : "";
-
-            sendCommand(sock, command, args);
+            // Send the message to the server
+            sendCommand(sock, "%message", inputLine);
         }
     }
 
@@ -88,10 +80,25 @@ void handleServerResponses(int serverSocket) {
             std::cerr << "Server disconnected or error receiving message." << std::endl;
             break;
         }
+
         // Display the message from the server
-        std::cout << "Server: " << std::string(buffer, bytesReceived) << std::endl;
+        std::string msg(buffer, bytesReceived);
+        if (msg.find("%message") == 0) {
+            // Extract the message content
+            std::string messageContent = msg.substr(9); // Skip "%message "
+            std::cout << "Message: " << messageContent << std::endl;
+        } else if (msg.find("%history") == 0) {
+            // Handle message history
+            size_t newlineIndex = msg.find('\n');
+            std::string history = msg.substr(newlineIndex + 1);
+            std::cout << "Message history:\n" << history << std::endl;
+        } else {
+            // Regular chat message
+            std::cout << msg << std::endl;
+        }
     }
 }
+
 
 void sendCommand(int serverSocket, const std::string& command, const std::string& args) {
     std::string fullCommand = command;

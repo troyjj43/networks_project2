@@ -13,17 +13,28 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <atomic>
-
+#include <deque>
 
 // Global variables
 std::vector<int> clientSockets; // Store client socket descriptors
 std::map<int, std::string> clients; // Map socket descriptor to client name
 std::mutex clientListMutex; // Mutex for thread-safe access to the clientSockets and clients
 std::atomic<bool> serverRunning(true); // Needed for shutting down server
-int serverSocket; // Declare serverSocket globally
+std::deque<std::string> messageHistory; // Store last 2 messages
+const size_t maxMessageHistory = 2; // Maximum number of messages to store in history
 
 void handleClient(int clientSocket);
-void broadcastMessage(const std::string& message, int excludeSocket = -1);
+void broadcastMessage(const std::string& message, int excludeSocket);
+void sendHistoryToClient(int clientSocket);
+
+// Helper function to get the current date and time as a string
+std::string getCurrentTime() {
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    std::string formattedTime = std::ctime(&now_c); 
+    formattedTime.pop_back(); // Remove newline character added by ctime
+    return formattedTime;
+}
 
 void listenForShutdownCommand() {
     std::string command;
@@ -42,9 +53,8 @@ void listenForShutdownCommand() {
             clients.clear();
             clientListMutex.unlock();
 
-            // Close the server socket
-            close(serverSocket);
-            break;
+            // Exit the server
+            exit(0);
         }
     }
 }
@@ -60,13 +70,13 @@ int main() {
 
     // Start the thread that listens for the shutdown command
     std::thread shutdownListener(listenForShutdownCommand);
-  
+
     // Creating socket file descriptor
     if ((serverSocket = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         std::cerr << "Socket creation failed" << std::endl;
         return -1;
     }
-  
+
     // Forcefully attaching socket to the port 12345
     if (setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
         std::cerr << "Setsockopt failed" << std::endl;
@@ -75,7 +85,7 @@ int main() {
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY; // Localhost
     address.sin_port = htons(PORT);
-  
+
     // Forcefully attaching socket to the port 12345
     if (bind(serverSocket, (struct sockaddr *)&address, sizeof(address))<0) {
         std::cerr << "Bind failed" << std::endl;
@@ -85,7 +95,7 @@ int main() {
         std::cerr << "Listen failed" << std::endl;
         return -1;
     }
-  
+
     while (serverRunning) {
         int clientSocket = accept(serverSocket, nullptr, nullptr);
         if (clientSocket < 0) {
@@ -93,9 +103,9 @@ int main() {
             std::cerr << "Accept failed: " << strerror(errno) << std::endl;
             continue;
         }
-      
+
         // Use a thread to handle the client
-        std::thread clientThread(handleClient, newSocket);
+        std::thread clientThread(handleClient, clientSocket);
         clientThread.detach(); // Detach the thread 
     }
 
@@ -107,8 +117,8 @@ int main() {
 }
 
 void handleClient(int clientSocket) {
-    char buffer[1024] = {0};
     // Read username
+    char buffer[1024] = {0};
     ssize_t readSize = read(clientSocket, buffer, sizeof(buffer) - 1);
     if (readSize <= 0) {
         std::cerr << "Failed to read username\n";
@@ -120,12 +130,22 @@ void handleClient(int clientSocket) {
     // Add user to the map
     {
         std::lock_guard<std::mutex> guard(clientListMutex);
-        for (const auto& client : clients) {
-            std::string joinMsg = username + " has joined the group.";
-            send(client.first, joinMsg.c_str(), joinMsg.length(), 0);
-        }
         clients[clientSocket] = username;
     }
+
+    // Notify other clients that the user has joined
+    {
+        std::lock_guard<std::mutex> guard(clientListMutex);
+        for (const auto& client : clients) {
+            if (client.first != clientSocket) {
+                std::string joinMsg = username + " has joined the chat.";
+                send(client.first, joinMsg.c_str(), joinMsg.length(), 0);
+            }
+        }
+    }
+
+    // Send message history to the client
+    sendHistoryToClient(clientSocket);
 
     // Listen for messages from the client
     while (true) {
@@ -157,26 +177,44 @@ void handleClient(int clientSocket) {
 
     // Notify other clients that the user has left
     std::string leaveMsg = username + " has left the chat.";
-    broadcastMessage(leaveMsg);
+    broadcastMessage(leaveMsg, clientSocket);
 
     // Close the socket
     close(clientSocket);
 }
 
-void broadcastMessage(const std::string& message, int excludeSocket) {
-    std::lock_guard<std::mutex> guard(clientListMutex); // Ensure thread safety
-    for (int socket : clientSockets) {
-        if (socket != excludeSocket) { // Check to not send the message to the excluded socket
-            send(socket, message.c_str(), message.length(), 0);
+
+void sendHistoryToClient(int clientSocket) {
+    std::lock_guard<std::mutex> guard(clientListMutex);
+    int startIndex = std::max(0, static_cast<int>(messageHistory.size()) - 2);
+    if (startIndex < 0) {
+        return; // No need to send history if it's empty
+    }
+    for (int i = startIndex; i < messageHistory.size(); ++i) {
+        std::string msg = messageHistory[i];
+        // Exclude join messages from history
+        if (msg.find("has joined the chat.") == std::string::npos) {
+            ssize_t bytesSent = send(clientSocket, msg.c_str(), msg.length(), 0);
+            if (bytesSent < 0) {
+                std::cerr << "Failed to send message to client." << std::endl;
+            } else {
+                std::cout << "Sent message to client: " << msg << std::endl;
+            }
         }
     }
 }
 
-// Helper function to get the current date and time as a string
-std::string getCurrentTime() {
-    auto now = std::chrono::system_clock::now();
-    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-    std::string formattedTime = std::ctime(&now_c); 
-    formattedTime.pop_back(); // Remove newline character added by ctime
-    return formattedTime;
+
+void broadcastMessage(const std::string& message, int excludeSocket = -1) {
+    std::lock_guard<std::mutex> guard(clientListMutex); // Ensure thread safety
+    if (messageHistory.size() >= maxMessageHistory) {
+        messageHistory.pop_front();
+    }
+    messageHistory.push_back(message);
+
+    for (int socket : clientSockets) {
+        if (socket != excludeSocket) {
+            send(socket, message.c_str(), message.length(), 0);
+        }
+    }
 }
