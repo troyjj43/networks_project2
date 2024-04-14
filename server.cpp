@@ -158,6 +158,7 @@ void handleClient(int clientSocket) {
         }
 
         std::string msg(buffer, readSize);
+        
         if (msg != "%join") {
             // Check if the client has joined the group
             {
@@ -194,11 +195,10 @@ void handleClient(int clientSocket) {
 
             // Send the user list to the client
             send(clientSocket, userList.c_str(), userList.length(), 0);
-        } else if (msg.find("%post") == 0) {
+        } else if (msg.find("%post") != std::string::npos) {
             // Extract the message content from the %post command
             std::string postContent = msg.substr(6); // Skip "%post "
             if (!postContent.empty()) {
-                std::lock_guard<std::mutex> guard(clientListMutex);
                 std::string postMsg = getCurrentTime() + " " + username + " posted: " + postContent;
                 broadcastMessage(postMsg, clientSocket);
             }
@@ -220,20 +220,6 @@ void handleClient(int clientSocket) {
             }
             break; // Exit the loop and close the client connection
         }
-        else if (msg == "%join") {
-            // Notify other clients that the user has joined the group
-            {
-                std::lock_guard<std::mutex> guard(clientListMutex);
-                for (const auto& client : clients) {
-                    if (client.first != clientSocket && std::find(clientSockets.begin(), clientSockets.end(), client.first) != clientSockets.end()) {
-                        std::string joinMsg = username + " has joined the group.";
-                        send(client.first, joinMsg.c_str(), joinMsg.length(), 0);
-                    }
-                }
-                // Add the client to the list of joined clients
-                clients[clientSocket] = username;
-            }
-        }
     }
 
     // Close the socket
@@ -241,36 +227,51 @@ void handleClient(int clientSocket) {
 }
 
 
-void sendHistoryToClient(int clientSocket) {
-    std::lock_guard<std::mutex> guard(clientListMutex);
-    int startIndex = std::max(0, static_cast<int>(messageHistory.size()) - 2);
-    if (startIndex < 0) {
-        return; // No need to send history if it's empty
-    }
-    for (int i = startIndex; i < messageHistory.size(); ++i) {
-        std::string msg = messageHistory[i];
-        // Exclude join messages from history
-        if (msg.find("has joined the chat.") == std::string::npos) {
-            ssize_t bytesSent = send(clientSocket, msg.c_str(), msg.length(), 0);
-            if (bytesSent < 0) {
-                std::cerr << "Failed to send message to client." << std::endl;
-            } else {
-                std::cout << "Sent message to client: " << msg << std::endl;
-            }
+void sendMessageToClients(const std::string& message) {
+    for (int socket : clientSockets) {
+        std::cout << "Sending message to socket " << socket << std::endl;
+        ssize_t bytesSent = send(socket, message.c_str(), message.length(), 0);
+        if (bytesSent < 0) {
+            std::cerr << "Failed to send message to socket " << socket << std::endl;
+        } else {
+            std::cout << "Sent message to socket " << socket << ": " << message << std::endl;
         }
     }
 }
 
 void broadcastMessage(const std::string& message, int excludeSocket = -1) {
-    std::lock_guard<std::mutex> guard(clientListMutex); // Ensure thread safety
-    if (messageHistory.size() >= maxMessageHistory) {
-        messageHistory.pop_front();
-    }
-    messageHistory.push_back(message);
-
-    for (int socket : clientSockets) {
-        if (socket != excludeSocket) {
-            send(socket, message.c_str(), message.length(), 0);
+    // Copy the list of client sockets to avoid modifying it while iterating
+    std::vector<int> socketsToSend;
+    {
+        std::lock_guard<std::mutex> guard(clientListMutex);
+        for (int socket : clientSockets) {
+            if (socket != excludeSocket) {
+                socketsToSend.push_back(socket);
+            }
         }
     }
+
+    // Send messages outside the lock
+    for (int socket : socketsToSend) {
+        ssize_t bytesSent = send(socket, message.c_str(), message.length(), 0);
+        if (bytesSent < 0) {
+            std::cerr << "Failed to send message to socket " << socket << std::endl;
+        }
+    }
+
+    std::cout << "Broadcasting message: " << message << std::endl;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+

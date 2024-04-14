@@ -88,7 +88,7 @@ int main() {
     while (true) {
         std::getline(std::cin, inputLine); // Read user input from console
         if (inputLine.empty()) continue;
-
+        std::cout << "Processing command: " << inputLine << std::endl;
         if (!joined && inputLine == "%join") {
             sendCommand(sock, inputLine);
             joined = true; // Update the joined status
@@ -125,8 +125,10 @@ void handleServerResponses(int serverSocket) {
             break;
         }
 
+        
         // Display the message from the server
         std::string msg(buffer, bytesReceived);
+        std::cout << "Received message from server: " << msg << std::endl;
         if (msg.find("%message") == 0) {
             // Extract the message content
             std::string messageContent = msg.substr(9); // Skip "%message "
@@ -156,3 +158,5 @@ void sendCommand(int serverSocket, const std::string& command, const std::string
         std::cout << "Command sent: " << fullCommand << std::endl;
     }
 }
+
+
