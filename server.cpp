@@ -147,6 +147,9 @@ void handleClient(int clientSocket) {
         clientSockets.push_back(clientSocket);
     }
 
+    messageHistory.push_back("this is a test message"); //Messages for testing 
+    messageHistory.push_back("another test message"); 
+
     // Listen for messages from the client
     while (true) {
         memset(buffer, 0, sizeof(buffer));
@@ -219,6 +222,48 @@ void handleClient(int clientSocket) {
                 clients.erase(clientSocket);
             }
             break; // Exit the loop and close the client connection
+        } else if (msg == "%join") {
+            // Notify other clients that the user has joined the group
+            {
+                std::lock_guard<std::mutex> guard(clientListMutex);
+                for (const auto& client : clients) {
+                    if (client.first != clientSocket && std::find(clientSockets.begin(), clientSockets.end(), client.first) != clientSockets.end()) {
+                        std::string joinMsg = username + " has joined the group.";
+                        send(client.first, joinMsg.c_str(), joinMsg.length(), 0);
+                    }
+                }
+                // Add the client to the list of joined clients
+                clients[clientSocket] = username;
+            }
+        } else if (msg.find("%message") != std::string::npos) {
+            std::lock_guard<std::mutex> guard(clientListMutex);
+            if (messageHistory.empty()) //Send Message to client and return nothing if message history is empty
+            {
+                std::string emptyHistoryWarning = "There are no previous messages in this bulletin board";
+                send(clientSocket,emptyHistoryWarning.c_str(), emptyHistoryWarning.length(), 0);
+            }
+            else{
+                std::string messageIDInput = msg.substr(9); // Skip "%message"  
+                messageIDInput.erase(std::remove_if(messageIDInput.begin(),messageIDInput.end(), ::isspace),messageIDInput.end()); //Remove any whitespace from user input
+                int messageIDNum;
+                try{
+                    messageIDNum = std::stoi(messageIDInput);
+                    std::string message = messageHistory[messageIDNum - 1];
+                    send(clientSocket, message.c_str(),message.length(), 0);
+                }
+                catch (const std::invalid_argument& e){
+                    std::string errorMessage = "Invalid message ID# use message ID# 1 or 2";
+                    send(clientSocket, errorMessage.c_str(),errorMessage.length(),0);
+                    continue;
+                }
+                catch (const std::out_of_range& e ){
+                    std::string errorMessage = "Message ID out of range: " + messageIDInput + "Use message ID$ 1 or 2";
+                    send(clientSocket, errorMessage.c_str(),errorMessage.length(),0);
+                    continue;
+                }
+
+            }
+            
         }
     }
 
