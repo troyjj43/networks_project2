@@ -103,6 +103,8 @@ int main() {
             sendCommand(sock, inputLine);
         } else if (inputLine.find("%grouppost ") == 0) {
             sendCommand(sock, inputLine);
+        } else if (inputLine.find("%groupmessage ") == 0) {
+            sendCommand(sock, inputLine);
         } else if (inputLine == "%exit") {
             break; // Exit the loop and close the application
         } else if (inputLine.find("%post") == 0 || inputLine.find("%message") == 0 || inputLine == "%users") {
