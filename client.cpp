@@ -89,11 +89,13 @@ int main() {
         std::getline(std::cin, inputLine); // Read user input from console
         if (inputLine.empty()) continue;
         std::cout << "Processing command: " << inputLine << std::endl;
-        if (!joined && inputLine == "%join") {
+        if (!joined && inputLine.find("%groupjoin ") == 0) {
             sendCommand(sock, inputLine);
             joined = true; // Update the joined status
+        } else if (inputLine == "%groups") {
+            sendCommand(sock, inputLine);
         } else if (!joined) {
-            std::cout << "You must join the message board with %join before using other commands.\n";
+            std::cout << "You must join a message board with %groupjoin before using other commands.\n";
         } else if (inputLine == "%leave") {
             sendCommand(sock, inputLine);
             joined = false; // Update the joined status
@@ -129,7 +131,10 @@ void handleServerResponses(int serverSocket) {
         // Display the message from the server
         std::string msg(buffer, bytesReceived);
         std::cout << "\n" << "Received message from server: " << std::endl;
-        if (msg.find("%message") == 0) {
+        if (msg.find("Available Groups:") == 0) {
+            // Directly display the groups list
+            std::cout << msg << std::endl;
+        } else if (msg.find("%message") == 0) {
             // Extract the message content
             std::string messageContent = msg.substr(9); // Skip "%message "
             std::cout << "Message: " << messageContent << std::endl;
@@ -158,5 +163,3 @@ void sendCommand(int serverSocket, const std::string& command, const std::string
         std::cout << "Command sent: " << fullCommand << std::endl;
     }
 }
-
-

@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <atomic>
 #include <deque>
+#include <set>
 
 // Global variables
 std::vector<int> clientSockets; // Store client socket descriptors
@@ -24,6 +25,24 @@ std::deque<std::string> messageHistory; // Store last 2 messages
 const size_t maxMessageHistory = 2; // Maximum number of messages to store in history
 std::vector<std::string> messageIDs;
 std::string userList;
+
+struct Group {
+    int id; // Numeric ID for the group
+    std::set<int> members; // Store client sockets that are members of the group
+    std::vector<std::string> messages; // Messages posted to the group
+    std::string name; // Name of the group
+};
+std::map<int, Group> groups; // Map group ID to Group structure
+std::map<int, std::set<int>> userGroups; // Maps client sockets to a set of group IDs they are part of
+
+// Initialize groups with IDs
+void initializeGroups() {
+    groups[1] = Group{1, std::set<int>(), std::vector<std::string>(), "group1"};
+    groups[2] = Group{2, std::set<int>(), std::vector<std::string>(), "group2"};
+    groups[3] = Group{3, std::set<int>(), std::vector<std::string>(), "group3"};
+    groups[4] = Group{4, std::set<int>(), std::vector<std::string>(), "group4"};
+    groups[5] = Group{5, std::set<int>(), std::vector<std::string>(), "group5"};
+}
 
 // Message ID counter
 int messageIdCounter = 1;
@@ -81,6 +100,8 @@ int main() {
     int addrlen = sizeof(address);
 
     std::cout << "Server started. Listening on port " << PORT << std::endl;
+
+    initializeGroups(); // Initialize the groups
 
     // Start the thread that listens for the shutdown command
     std::thread shutdownListener(listenForShutdownCommand);
@@ -159,17 +180,45 @@ void handleClient(int clientSocket) {
         }
 
         std::string msg(buffer, readSize);
+        if (msg == "%groups") {
+            std::string availableGroups = "Available Groups:\n";
+            for (const auto& group : groups) {
+                availableGroups += "ID: " + std::to_string(group.second.id) + " - " + group.second.name + "\n";
+            }
+            send(clientSocket, availableGroups.c_str(), availableGroups.length(), 0);
+        }
         
-        if (msg != "%join") {
-            // Check if the client has joined the group
-            {
-                std::lock_guard<std::mutex> guard(clientListMutex);
-                if (clients.find(clientSocket) == clients.end()) {
-                    // Client has not joined the group yet
-                    std::string joinMsg = "You must join the message board with %join before using other commands.";
-                    send(clientSocket, joinMsg.c_str(), joinMsg.length(), 0);
-                    continue;
+        if (msg.find("%groupjoin ") == 0) {
+            std::string groupIdentifier = msg.substr(11); // Get the rest of the string after %groupjoin 
+            groupIdentifier.erase(std::remove_if(groupIdentifier.begin(), groupIdentifier.end(), isspace), groupIdentifier.end()); // Remove any extra spaces
+
+            bool groupFound = false;
+            // Try to join by ID first
+            try {
+                int groupId = std::stoi(groupIdentifier);
+                auto it = groups.find(groupId);
+                if (it != groups.end()) {
+                    it->second.members.insert(clientSocket);
+                    userGroups[clientSocket].insert(groupId); // Add group to user's list of groups
+                    groupFound = true;
+                    send(clientSocket, ("Joined group " + it->second.name + "\n").c_str(), ("Joined group " + it->second.name + "\n").length(), 0);
                 }
+            } catch (std::invalid_argument&) {
+                // Not a number so treat it as a name
+                for (auto& group : groups) {
+                    if (group.second.name == groupIdentifier) {
+                        group.second.members.insert(clientSocket);
+                        userGroups[clientSocket].insert(group.first); // Add group to user's list of groups
+                        groupFound = true;
+                        send(clientSocket, ("Joined group " + group.second.name + "\n").c_str(), ("Joined group " + group.second.name + "\n").length(), 0);
+                        break;
+                    }
+                }
+            }
+
+            if (!groupFound) {
+                std::string errorMsg = "Group not found\n";
+                send(clientSocket, errorMsg.c_str(), errorMsg.length(), 0);
             }
         }
 
