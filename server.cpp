@@ -256,6 +256,46 @@ void handleClient(int clientSocket) {
             }
         }
 
+        if (msg.find("%groupusers ") == 0) {
+            std::string groupIdentifier = msg.substr(12); // Extract the group identifier
+            groupIdentifier.erase(std::remove_if(groupIdentifier.begin(), groupIdentifier.end(), isspace), groupIdentifier.end()); // Clean spaces
+
+            bool groupFound = false;
+            // Try by ID
+            try {
+                int groupId = std::stoi(groupIdentifier);
+                auto it = groups.find(groupId);
+                if (it != groups.end() && userGroups[clientSocket].find(groupId) != userGroups[clientSocket].end()) {
+                    // User is a member of the group, list users
+                    std::string userList = "Users in " + it->second.name + ":\n";
+                    for (int memberSocket : it->second.members) {
+                        userList += clients[memberSocket] + "\n";
+                    }
+                    send(clientSocket, userList.c_str(), userList.length(), 0);
+                    groupFound = true;
+                }
+            } catch (std::invalid_argument&) {
+                // Not a number so use name
+                for (auto& group : groups) {
+                    if (group.second.name == groupIdentifier && userGroups[clientSocket].find(group.first) != userGroups[clientSocket].end()) {
+                        // User is a member of the group, list users
+                        std::string userList = "Users in " + group.second.name + ":\n";
+                        for (int memberSocket : group.second.members) {
+                            userList += clients[memberSocket] + "\n";
+                        }
+                        send(clientSocket, userList.c_str(), userList.length(), 0);
+                        groupFound = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!groupFound) {
+                std::string errorMsg = "Group not found or access denied\n";
+                send(clientSocket, errorMsg.c_str(), errorMsg.length(), 0);
+            }
+        }
+
         if (msg == "%leave") {
             // Remove the client from the global list and map
             {

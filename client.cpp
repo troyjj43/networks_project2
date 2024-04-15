@@ -91,14 +91,16 @@ int main() {
         std::cout << "Processing command: " << inputLine << std::endl;
         if (inputLine.find("%groupjoin ") == 0) {
             sendCommand(sock, inputLine);
-            joined = true; // Update the joined status
+            // joined = true; // Update the joined status
         } else if (inputLine == "%groups") {
             sendCommand(sock, inputLine);
-        } else if (!joined) {
-            std::cout << "You must join a message board with %groupjoin before using other commands.\n";
+        // } else if (!joined) {
+            // std::cout << "You must join a message board with %groupjoin before using other commands.\n";
         } else if (inputLine.find("%groupleave ") == 0) {
             sendCommand(sock, inputLine);
-            joined = false; // Update the joined status
+            // joined = false; // Update the joined status
+        } else if (inputLine.find("%groupusers ") == 0) {
+            sendCommand(sock, inputLine);
         } else if (inputLine == "%exit") {
             break; // Exit the loop and close the application
         } else if (inputLine.find("%post") == 0 || inputLine.find("%message") == 0 || inputLine == "%users") {
@@ -126,7 +128,6 @@ void handleServerResponses(int serverSocket) {
             std::cerr << "Server disconnected or error receiving message." << std::endl;
             break;
         }
-
         
         // Display the message from the server
         std::string msg(buffer, bytesReceived);
