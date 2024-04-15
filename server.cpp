@@ -245,23 +245,16 @@ void handleClient(int clientSocket) {
             else{
                 std::string messageIDInput = msg.substr(9); // Skip "%message"  
                 messageIDInput.erase(std::remove_if(messageIDInput.begin(),messageIDInput.end(), ::isspace),messageIDInput.end()); //Remove any whitespace from user input
-                int messageIDNum;
-                try{
-                    messageIDNum = std::stoi(messageIDInput);
+                char extractedIdNum = messageIDInput.back();
+                if(extractedIdNum == '1' or extractedIdNum == '2'){ //Check  if the user's input is within range of messageHistory
+                    int messageIDNum = messageIDInput.back() - '0'; //Convert last character to integer
                     std::string message = messageHistory[messageIDNum - 1];
                     send(clientSocket, message.c_str(),message.length(), 0);
+                } else{
+                    //Send a message to the client to use a valid ID number
+                    std::string errorMessage = "Entered ID number is not valid, use ID number 1 or 2";
+                    send(clientSocket, errorMessage.c_str(), errorMessage.length(),0);
                 }
-                catch (const std::invalid_argument& e){
-                    std::string errorMessage = "Invalid message ID# use message ID# 1 or 2";
-                    send(clientSocket, errorMessage.c_str(),errorMessage.length(),0);
-                    continue;
-                }
-                catch (const std::out_of_range& e ){
-                    std::string errorMessage = "Message ID out of range: " + messageIDInput + "Use message ID$ 1 or 2";
-                    send(clientSocket, errorMessage.c_str(),errorMessage.length(),0);
-                    continue;
-                }
-
             }
             
         }
