@@ -50,6 +50,7 @@ int messageIdCounter = 1;
 void handleClient(int clientSocket);
 void broadcastMessage(const std::string& message, int excludeSocket);
 void sendHistoryToClient(int clientSocket);
+void broadcastMessageToGroup(int groupID, std::string& message, int excludeSocket);
 
 // Helper function to get the current date and time as a string
 std::string getCurrentTime() {
@@ -296,6 +297,20 @@ void handleClient(int clientSocket) {
             }
         }
 
+        if (msg.find("%grouppost ") == 0) {
+            std::string extractedMessage = msg.substr(12); // Extract the users message from the command
+            char extractedID = msg[11];
+            try{
+                int groupID = extractedID - '0'; // Extract ID from message as char
+                std::string message = username + "posted to group " + extractedID + ": \n" + extractedMessage;
+                broadcastMessageToGroup(groupID, message, clientSocket); 
+            } 
+            catch (std::invalid_argument&) {
+                std::string errorMessage = extractedID + "was not recognized as a group ID number, use format: %grouppost id message";
+                send(clientSocket, errorMessage.c_str(),errorMessage.length(),0);
+            }
+        }
+
         if (msg == "%leave") {
             // Remove the client from the global list and map
             {
@@ -416,7 +431,6 @@ void broadcastMessage(const std::string& message, int excludeSocket = -1) {
                 socketsToSend.push_back(socket);
             }
         }
-        //messageIDs.push_back(message);
         messageIdCounter++;
     }
 
@@ -432,8 +446,20 @@ void broadcastMessage(const std::string& message, int excludeSocket = -1) {
 }
 
 
-
-
+void broadcastMessageToGroup(int groupID, std::string& message, int excludeSocket){
+    auto it = groups.find(groupID);
+    if (it != groups.end()) {
+        for (int memberSocket : it->second.members) {
+            if (memberSocket != excludeSocket){
+                send(memberSocket, message.c_str(),message.length(),0);
+            }   
+        }  
+    }
+    else{
+        std::string errorMessage = "Group ID '" + std::to_string(groupID) + "not found \n";
+        send(excludeSocket, errorMessage.c_str(),errorMessage.length(),0);
+    }
+}
 
 
 
