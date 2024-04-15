@@ -201,7 +201,7 @@ void handleClient(int clientSocket) {
             std::string postContent = msg.substr(6); // Skip "%post "
             std::string currentmessageID = std::to_string(messageIdCounter);
             if (!postContent.empty()) {
-                std::string postMsg = "Message ID:" + currentmessageID + " " + username + " posted: " + postContent;
+                std::string postMsg = "Message ID: " + currentmessageID + "\n" + username + " posted: " + postContent + "\n";
                 broadcastMessage(postMsg, clientSocket);
             }
         } else if (msg == "%exit") {

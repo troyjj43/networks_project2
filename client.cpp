@@ -128,7 +128,7 @@ void handleServerResponses(int serverSocket) {
         
         // Display the message from the server
         std::string msg(buffer, bytesReceived);
-        std::cout << "Received message from server: " << msg << std::endl;
+        std::cout << "\n" << "Received message from server: " << std::endl;
         if (msg.find("%message") == 0) {
             // Extract the message content
             std::string messageContent = msg.substr(9); // Skip "%message "
