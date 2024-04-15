@@ -252,6 +252,7 @@ void handleClient(int clientSocket) {
             if (!postContent.empty()) {
                 std::string postMsg = "Message ID: " + currentmessageID + "\n" + username + " posted: " + postContent + "\n";
                 broadcastMessage(postMsg, clientSocket);
+                messageIDs.push_back(postContent);
             }
         } else if (msg == "%exit") {
             // Notify other clients that the user has left
@@ -305,7 +306,7 @@ void handleClient(int clientSocket) {
                     std::string errorMessage = "The ID Number entered does not exist";
                     send(clientSocket,errorMessage.c_str(),errorMessage.length(),0);
                 } else{
-                    std::string message = messageIDs[messageIDNum - 1];
+                    std::string message = "Message:" + std::to_string(messageIDNum) + "\n" + messageIDs[messageIDNum - 1];
                     send(clientSocket, message.c_str(),message.length(), 0);
                 }
                 
@@ -341,7 +342,7 @@ void broadcastMessage(const std::string& message, int excludeSocket = -1) {
                 socketsToSend.push_back(socket);
             }
         }
-        messageIDs.push_back(message);
+        //messageIDs.push_back(message);
         messageIdCounter++;
     }
 
