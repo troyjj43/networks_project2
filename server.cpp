@@ -22,6 +22,7 @@ std::mutex clientListMutex; // Mutex for thread-safe access to the clientSockets
 std::atomic<bool> serverRunning(true); // Needed for shutting down server
 std::deque<std::string> messageHistory; // Store last 2 messages
 const size_t maxMessageHistory = 2; // Maximum number of messages to store in history
+std::vector<std::string> messageIDs;
 std::string userList;
 
 // Message ID counter
@@ -147,9 +148,6 @@ void handleClient(int clientSocket) {
         clientSockets.push_back(clientSocket);
     }
 
-    messageHistory.push_back("this is a test message"); //Messages for testing 
-    messageHistory.push_back("another test message"); 
-
     // Listen for messages from the client
     while (true) {
         memset(buffer, 0, sizeof(buffer));
@@ -201,8 +199,9 @@ void handleClient(int clientSocket) {
         } else if (msg.find("%post") != std::string::npos) {
             // Extract the message content from the %post command
             std::string postContent = msg.substr(6); // Skip "%post "
+            std::string currentmessageID = std::to_string(messageIdCounter);
             if (!postContent.empty()) {
-                std::string postMsg = getCurrentTime() + " " + username + " posted: " + postContent;
+                std::string postMsg = "Message ID:" + currentmessageID + " " + username + " posted: " + postContent;
                 broadcastMessage(postMsg, clientSocket);
             }
         } else if (msg == "%exit") {
@@ -237,7 +236,7 @@ void handleClient(int clientSocket) {
             }
         } else if (msg.find("%message") != std::string::npos) {
             std::lock_guard<std::mutex> guard(clientListMutex);
-            if (messageHistory.empty()) //Send Message to client and return nothing if message history is empty
+            if (messageIDs.empty()) //Send Message to client and return nothing if message history is empty
             {
                 std::string emptyHistoryWarning = "There are no previous messages in this bulletin board";
                 send(clientSocket,emptyHistoryWarning.c_str(), emptyHistoryWarning.length(), 0);
@@ -246,16 +245,16 @@ void handleClient(int clientSocket) {
                 std::string messageIDInput = msg.substr(9); // Skip "%message"  
                 messageIDInput.erase(std::remove_if(messageIDInput.begin(),messageIDInput.end(), ::isspace),messageIDInput.end()); //Remove any whitespace from user input
                 char extractedIdNum = messageIDInput.back();
-                if(extractedIdNum == '1' or extractedIdNum == '2'){ //Check  if the user's input is within range of messageHistory
-                    int messageIDNum = messageIDInput.back() - '0'; //Convert last character to integer
-                    std::string message = messageHistory[messageIDNum - 1];
-                    send(clientSocket, message.c_str(),message.length(), 0);
+                int messageIDNum = messageIDInput.back() - '0';
+                if (messageIDNum < 1 || messageIDNum-1 > messageIDs.size()){
+                    std::string errorMessage = "The ID Number entered does not exist";
+                    send(clientSocket,errorMessage.c_str(),errorMessage.length(),0);
                 } else{
-                    //Send a message to the client to use a valid ID number
-                    std::string errorMessage = "Entered ID number is not valid, use ID number 1 or 2";
-                    send(clientSocket, errorMessage.c_str(), errorMessage.length(),0);
+                    std::string message = messageIDs[messageIDNum - 1];
+                    send(clientSocket, message.c_str(),message.length(), 0);
                 }
-            }
+                
+               }
             
         }
     }
@@ -287,6 +286,8 @@ void broadcastMessage(const std::string& message, int excludeSocket = -1) {
                 socketsToSend.push_back(socket);
             }
         }
+        messageIDs.push_back(message);
+        messageIdCounter++;
     }
 
     // Send messages outside the lock
