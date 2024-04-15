@@ -89,14 +89,14 @@ int main() {
         std::getline(std::cin, inputLine); // Read user input from console
         if (inputLine.empty()) continue;
         std::cout << "Processing command: " << inputLine << std::endl;
-        if (!joined && inputLine.find("%groupjoin ") == 0) {
+        if (inputLine.find("%groupjoin ") == 0) {
             sendCommand(sock, inputLine);
             joined = true; // Update the joined status
         } else if (inputLine == "%groups") {
             sendCommand(sock, inputLine);
         } else if (!joined) {
             std::cout << "You must join a message board with %groupjoin before using other commands.\n";
-        } else if (inputLine == "%leave") {
+        } else if (inputLine.find("%groupleave ") == 0) {
             sendCommand(sock, inputLine);
             joined = false; // Update the joined status
         } else if (inputLine == "%exit") {
@@ -143,6 +143,10 @@ void handleServerResponses(int serverSocket) {
             size_t newlineIndex = msg.find('\n');
             std::string history = msg.substr(newlineIndex + 1);
             std::cout << "Message history:\n" << history << std::endl;
+        } else if (msg.find("Joined group ") == 0) {
+            // Extract the group name from the message
+            std::string groupName = msg.substr(13, msg.find("\n") - 13);
+            std::cout << "Successfully joined group: " << groupName << std::endl;
         } else {
             // Regular chat message
             std::cout << msg << std::endl;

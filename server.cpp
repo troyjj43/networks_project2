@@ -222,6 +222,40 @@ void handleClient(int clientSocket) {
             }
         }
 
+        if (msg.find("%groupleave ") == 0) {
+            std::string groupIdentifier = msg.substr(12); // Extract group identifier after command
+            groupIdentifier.erase(std::remove_if(groupIdentifier.begin(), groupIdentifier.end(), isspace), groupIdentifier.end()); // Clean spaces
+
+            bool groupFound = false;
+            // Try to leave by ID
+            try {
+                int groupId = std::stoi(groupIdentifier);
+                auto it = groups.find(groupId);
+                if (it != groups.end() && userGroups[clientSocket].find(groupId) != userGroups[clientSocket].end()) {
+                    it->second.members.erase(clientSocket);
+                    userGroups[clientSocket].erase(groupId); // Remove group from user's list of groups
+                    groupFound = true;
+                    send(clientSocket, ("Left group " + it->second.name + "\n").c_str(), ("Left group " + it->second.name + "\n").length(), 0);
+                }
+            } catch (std::invalid_argument&) {
+                // Leave by name if ID fails
+                for (auto& group : groups) {
+                    if (group.second.name == groupIdentifier && userGroups[clientSocket].find(group.first) != userGroups[clientSocket].end()) {
+                        group.second.members.erase(clientSocket);
+                        userGroups[clientSocket].erase(group.first); // Remove group from user's list of groups
+                        groupFound = true;
+                        send(clientSocket, ("Left group " + group.second.name + "\n").c_str(), ("Left group " + group.second.name + "\n").length(), 0);
+                        break;
+                    }
+                }
+            }
+
+            if (!groupFound) {
+                std::string errorMsg = "Group not found or not a member\n";
+                send(clientSocket, errorMsg.c_str(), errorMsg.length(), 0);
+            }
+        }
+
         if (msg == "%leave") {
             // Remove the client from the global list and map
             {
