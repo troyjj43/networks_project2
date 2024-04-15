@@ -234,6 +234,12 @@ void handleClient(int clientSocket) {
                 // Add the client to the list of joined clients
                 clients[clientSocket] = username;
             }
+            // Update the user list
+            updateUserList();
+            std::string header = "Group Members:\n";
+            std::string finalUserList = header + userList;  // Add header before the user list
+            // Send the user list to the client
+            send(clientSocket, finalUserList.c_str(), finalUserList.length(), 0);
         } else if (msg.find("%message") != std::string::npos) {
             std::lock_guard<std::mutex> guard(clientListMutex);
             if (messageIDs.empty()) //Send Message to client and return nothing if message history is empty
