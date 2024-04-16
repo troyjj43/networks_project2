@@ -214,6 +214,15 @@ void handleClient(int clientSocket) {
                     userGroups[clientSocket].insert(groupId); // Add group to user's list of groups
                     groupFound = true;
                     send(clientSocket, ("Joined group " + it->second.name + "\n").c_str(), ("Joined group " + it->second.name + "\n").length(), 0);
+
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Delay between messages
+
+                    // Send current members in the group
+                    std::string memberList = "Current members in " + it->second.name + ":\n";
+                    for (int memberSocket : it->second.members) {
+                        memberList += clients[memberSocket] + "\n";
+                    }
+                    send(clientSocket, memberList.c_str(), memberList.length(), 0);
                 }
             } catch (std::invalid_argument&) {
                 // Not a number so treat it as a name
@@ -223,6 +232,15 @@ void handleClient(int clientSocket) {
                         userGroups[clientSocket].insert(group.first); // Add group to user's list of groups
                         groupFound = true;
                         send(clientSocket, ("Joined group " + group.second.name + "\n").c_str(), ("Joined group " + group.second.name + "\n").length(), 0);
+
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Delay between messages
+
+                        // Send current members in the group
+                        std::string memberList = "Current members in " + group.second.name + ":\n";
+                        for (int memberSocket : group.second.members) {
+                            memberList += clients[memberSocket] + "\n";
+                        }
+                        send(clientSocket, memberList.c_str(), memberList.length(), 0);
                         break;
                     }
                 }
