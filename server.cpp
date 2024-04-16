@@ -223,6 +223,14 @@ void handleClient(int clientSocket) {
                         memberList += clients[memberSocket] + "\n";
                     }
                     send(clientSocket, memberList.c_str(), memberList.length(), 0);
+
+                    // Notify all other members about the new member
+                    std::string notification = clients[clientSocket] + " has joined the group " + it->second.name + "\n";
+                    for (int memberSocket : it->second.members) {
+                        if (memberSocket != clientSocket) {  // Don't send the notification to the user who just joined
+                            send(memberSocket, notification.c_str(), notification.length(), 0);
+                        }
+                    }
                 }
             } catch (std::invalid_argument&) {
                 // Not a number so treat it as a name
@@ -241,6 +249,14 @@ void handleClient(int clientSocket) {
                             memberList += clients[memberSocket] + "\n";
                         }
                         send(clientSocket, memberList.c_str(), memberList.length(), 0);
+
+                        // Notify all other members about the new member
+                        std::string notification = clients[clientSocket] + " has joined the group " + group.second.name + "\n";
+                        for (int memberSocket : group.second.members) {
+                            if (memberSocket != clientSocket) {
+                                send(memberSocket, notification.c_str(), notification.length(), 0);
+                            }
+                        }
                         break;
                     }
                 }
@@ -523,13 +539,3 @@ void broadcastMessageToGroup(int groupID, std::string& message, std::string& mes
         send(excludeSocket, errorMessage.c_str(),errorMessage.length(),0);
     }
 }
-
-
-
-
-
-
-
-
-
-
