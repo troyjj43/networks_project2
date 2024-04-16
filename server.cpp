@@ -172,6 +172,15 @@ void handleClient(int clientSocket) {
         clientSockets.push_back(clientSocket);
     }
 
+    // Output list of groups when client connects
+    {
+        std::string availableGroups = "Available Groups:\n";
+            for (const auto& group : groups) {
+                availableGroups += "ID: " + std::to_string(group.second.id) + " - " + group.second.name + "\n";
+            }
+            send(clientSocket, availableGroups.c_str(), availableGroups.length(), 0);
+    }
+    
     // Listen for messages from the client
     while (true) {
         memset(buffer, 0, sizeof(buffer));
@@ -307,7 +316,7 @@ void handleClient(int clientSocket) {
                 auto it = groups.find(groupID);
                 Group &group = it->second;
                 if(std::find(group.members.begin(),group.members.end(), clientSocket)== group.members.end()){
-                    std::string errorMessage = "Use command: %joingroup id";
+                    std::string errorMessage = "Cannot send messages until you have joined the group";
                     send(clientSocket, errorMessage.c_str(), errorMessage.length(),0);
                 }
                 else{
@@ -327,15 +336,17 @@ void handleClient(int clientSocket) {
                 int messageID = msg[16] -'0';
                 auto it = groups.find(groupID);
                 Group &group = it->second;
-                // if( it == groups.end() || std::find(group.members.begin(),group.members.end(), clientSocket)== group.members.end()){
-                //     std::string errorMessage = "Use command: %groupjoin id";
-                //     send(clientSocket, errorMessage.c_str(), errorMessage.length(),0);
-                // }
-                //else{
-                std::string retrievedMessage = it->second.messageIDs[messageID - 1];
-                std:: string message = "Message: " + std::to_string(messageID) + " " + retrievedMessage;
-                send(clientSocket, message.c_str(), message.length(), 0);
-                //}
+                if( it == groups.end() || std::find(group.members.begin(),group.members.end(), clientSocket)== group.members.end()){
+                    std::string errorMessage = "You have not joined this group";
+                    send(clientSocket, errorMessage.c_str(), errorMessage.length(),0);
+                } else if(messageID > it->second.messageIDs.size()){
+                    std::string erorrMessage = "Message ID does not exist";
+                    send(clientSocket, erorrMessage.c_str(), erorrMessage.length(),0);
+                } else{
+                    std::string retrievedMessage = it->second.messageIDs[messageID - 1];
+                    std:: string message = "Message: " + std::to_string(messageID) + " " + retrievedMessage;
+                    send(clientSocket, message.c_str(), message.length(), 0);
+                }
             }
             catch (std::invalid_argument&) {
                 std::string errorMessage =  "Group or Message ID was not recognized";
